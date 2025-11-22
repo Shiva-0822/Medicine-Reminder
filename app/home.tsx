@@ -176,8 +176,45 @@ export default function HomeScreen() {
 
       setTodaysMedications(todayMeds);
 
-      // Calculate completed doses
-      const completed = todaysDoses.filter((dose) => dose.taken).length;
+      // Calculate completed doses - only count doses that match today's medication schedule
+      let completed = 0;
+      for (const medication of todayMeds) {
+        // Make sure medication.times exists and is an array
+        if (medication.times && Array.isArray(medication.times)) {
+          for (const time of medication.times) {
+            let hours, minutes;
+            
+            // Handle 12-hour format with AM/PM
+            if (time.includes("AM") || time.includes("PM")) {
+              const [timePart, period] = time.split(" ");
+              [hours, minutes] = timePart.split(":").map(Number);
+              
+              // Convert to 24-hour format for comparison
+              if (period === "PM" && hours !== 12) {
+                hours += 12;
+              } else if (period === "AM" && hours === 12) {
+                hours = 0;
+              }
+            } else {
+              // Fallback to 24-hour format
+              [hours, minutes] = time.split(":").map(Number);
+            }
+            
+            // Check if this specific dose was taken
+            const doseTaken = todaysDoses.some(
+              (dose) => 
+                dose.medicationId === medication.id &&
+                dose.taken &&
+                new Date(dose.timestamp).getHours() === hours &&
+                new Date(dose.timestamp).getMinutes() === minutes
+            );
+            
+            if (doseTaken) {
+              completed++;
+            }
+          }
+        }
+      }
       setCompletedDoses(completed);
     } catch (error) {
       console.error("Error loading medications:", error);
@@ -234,9 +271,33 @@ export default function HomeScreen() {
     }, [loadMedications])
   );
 
-  const handleTakeDose = async (medication: Medication) => {
+  const handleTakeDose = async (medication: Medication, timeIndex: number = 0) => {
     try {
-      await recordDose(medication.id, true, new Date().toISOString());
+      // Create a timestamp for the specific time slot
+      const now = new Date();
+      const time = medication.times[timeIndex];
+      let hours, minutes;
+      
+      // Handle 12-hour format with AM/PM
+      if (time.includes("AM") || time.includes("PM")) {
+        const [timePart, period] = time.split(" ");
+        [hours, minutes] = timePart.split(":").map(Number);
+        
+        // Convert to 24-hour format
+        if (period === "PM" && hours !== 12) {
+          hours += 12;
+        } else if (period === "AM" && hours === 12) {
+          hours = 0;
+        }
+      } else {
+        // Fallback to 24-hour format
+        [hours, minutes] = time.split(":").map(Number);
+      }
+      
+      const doseTime = new Date(now);
+      doseTime.setHours(hours, minutes, 0, 0);
+      
+      await recordDose(medication.id, true, doseTime.toISOString());
       await loadMedications(); // Reload data after recording dose
     } catch (error) {
       console.error("Error recording dose:", error);
@@ -247,6 +308,34 @@ export default function HomeScreen() {
   const isDoseTaken = (medicationId: string) => {
     return doseHistory.some(
       (dose) => dose.medicationId === medicationId && dose.taken
+    );
+  };
+  
+  const isDoseTakenForTime = (medicationId: string, time: string) => {
+    let hours, minutes;
+    
+    // Handle 12-hour format with AM/PM
+    if (time.includes("AM") || time.includes("PM")) {
+      const [timePart, period] = time.split(" ");
+      [hours, minutes] = timePart.split(":").map(Number);
+      
+      // Convert to 24-hour format for comparison
+      if (period === "PM" && hours !== 12) {
+        hours += 12;
+      } else if (period === "AM" && hours === 12) {
+        hours = 0;
+      }
+    } else {
+      // Fallback to 24-hour format
+      [hours, minutes] = time.split(":").map(Number);
+    }
+    
+    return doseHistory.some(
+      (dose) => 
+        dose.medicationId === medicationId && 
+        dose.taken &&
+        new Date(dose.timestamp).getHours() === hours &&
+        new Date(dose.timestamp).getMinutes() === minutes
     );
   };
 
@@ -300,7 +389,9 @@ export default function HomeScreen() {
 
   // Calculate total doses from today's medications
   const totalDoses = todaysMedications.reduce((sum, med) => {
-    return sum + (med.times?.length || 0);
+    // Make sure we're handling edge cases correctly
+    const timesCount = med.times ? med.times.length : 0;
+    return sum + timesCount;
   }, 0);
 
   const progress =
@@ -416,31 +507,50 @@ export default function HomeScreen() {
                       <Text style={styles.medicineName}>{medication.name}</Text>
                       <Text style={styles.dosageInfo}>{medication.dosage}</Text>
                     </View>
-                    <View style={styles.doseTime}>
-                      <Ionicons name="time-outline" size={16} color="#666" />
-                      <Text style={styles.timeText}>{medication.times[0]}</Text>
+                    <View style={styles.doseTimesContainer}>
+                      {medication.times.map((time, index) => (
+                        <View key={index} style={styles.doseTimeRow}>
+                          <Ionicons name="time-outline" size={16} color="#666" />
+                          <Text style={styles.timeText}>{time}</Text>
+                          {isDoseTakenForTime(medication.id, time) && (
+                            <View style={styles.tinyTakenBadge}>
+                              <Ionicons name="checkmark" size={12} color="#4CAF50" />
+                            </View>
+                          )}
+                        </View>
+                      ))}
                     </View>
                   </View>
-                  {taken ? (
-                    <View style={[styles.takenBadge]}>
-                      <Ionicons
-                        name="checkmark-circle"
-                        size={20}
-                        color="#4CAF50"
-                      />
-                      <Text style={styles.takenText}>Taken</Text>
-                    </View>
-                  ) : (
-                    <TouchableOpacity
-                      style={[
-                        styles.takeDoseButton,
-                        { backgroundColor: medication.color },
-                      ]}
-                      onPress={() => handleTakeDose(medication)}
-                    >
-                      <Text style={styles.takeDoseText}>Take</Text>
-                    </TouchableOpacity>
-                  )}
+                  <View style={styles.timesActionsContainer}>
+                    {medication.times.map((time, index) => {
+                      const isTaken = isDoseTakenForTime(medication.id, time);
+                      return (
+                        <View key={index} style={styles.timeActionRow}>
+                          {isTaken ? (
+                            <View style={[styles.takenBadge, styles.smallTakenBadge]}>
+                              <Ionicons
+                                name="checkmark-circle"
+                                size={16}
+                                color="#4CAF50"
+                              />
+                              <Text style={[styles.takenText, styles.smallTakenText]}>Taken</Text>
+                            </View>
+                          ) : (
+                            <TouchableOpacity
+                              style={[
+                                styles.takeDoseButton,
+                                styles.smallTakeDoseButton,
+                                { backgroundColor: medication.color },
+                              ]}
+                              onPress={() => handleTakeDose(medication, index)}
+                            >
+                              <Text style={[styles.takeDoseText, styles.smallTakeDoseText]}>Take</Text>
+                            </TouchableOpacity>
+                          )}
+                        </View>
+                      );
+                    })}
+                  </View>
                   <TouchableOpacity
                     style={styles.medicationDeleteButton}
                     onPress={() => handleDeleteMedication(medication.id, medication.name)}
@@ -485,7 +595,7 @@ export default function HomeScreen() {
                     {medication.dosage}
                   </Text>
                   <Text style={styles.notificationTime}>
-                    {medication.times[0]}
+                    {medication.times.join(", ")}
                   </Text>
                 </View>
               </View>
@@ -820,5 +930,43 @@ const styles = StyleSheet.create({
     backgroundColor: "#FFEBEE",
     justifyContent: "center",
     alignItems: "center",
+  },
+  doseTimesContainer: {
+    marginTop: 8,
+  },
+  doseTimeRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 4,
+  },
+  tinyTakenBadge: {
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: "#E8F5E9",
+    justifyContent: "center",
+    alignItems: "center",
+    marginLeft: 8,
+  },
+  timesActionsContainer: {
+    alignItems: "flex-end",
+    justifyContent: "center",
+  },
+  timeActionRow: {
+    marginBottom: 4,
+  },
+  smallTakenBadge: {
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+  },
+  smallTakenText: {
+    fontSize: 12,
+  },
+  smallTakeDoseButton: {
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+  },
+  smallTakeDoseText: {
+    fontSize: 12,
   },
 });

@@ -1,8 +1,7 @@
 {
   "expo": {
     "name": "Medicine Reminder",
-    "slug": "Medicine-Reminder",
-    "projectId": "REPLACE_WITH_YOUR_EXPO_PROJECT_ID",
+    "slug": "medicine-reminder",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
@@ -14,7 +13,7 @@
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/images/adaptive-icon.png",
+        "foregroundImage": "./assets/images/icon.png",
         "backgroundColor": "#ffffff"
       },
       "package": "com.shivakumar08.MedicineReminder"
@@ -22,14 +21,14 @@
     "web": {
       "bundler": "metro",
       "output": "static",
-      "favicon": "./assets/images/favicon.png"
+      "favicon": "./assets/images/icon.png"
     },
     "plugins": [
       "expo-router",
       [
         "expo-splash-screen",
         {
-          "image": "./assets/images/splash-icon.png",
+          "image": "./assets/images/icon.png",
           "imageWidth": 200,
           "resizeMode": "contain",
           "backgroundColor": "#ffffff"
@@ -44,8 +43,9 @@
         "origin": false
       },
       "eas": {
-        "projectId": "e6769f3f-abf1-4919-a35d-5ccfdda940f7"
+        "projectId": "92039596-6020-4aa4-ada3-65250d28740e"
       }
-    }
+    },
+    "owner": "shivakumar-08"
   }
 }

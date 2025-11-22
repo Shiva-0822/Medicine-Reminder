@@ -110,12 +110,14 @@ export async function recordDose(
   try {
     const history = await getDoseHistory();
     
-    // Check if dose already recorded for this medication at this time
+    // Check if dose already recorded for this medication at this specific time
+    const doseTime = new Date(timestamp);
     const existingDose = history.find(
       (dose) => 
         dose.medicationId === medicationId && 
-        new Date(dose.timestamp).toDateString() === new Date(timestamp).toDateString() &&
-        new Date(dose.timestamp).getHours() === new Date(timestamp).getHours()
+        new Date(dose.timestamp).toDateString() === doseTime.toDateString() &&
+        new Date(dose.timestamp).getHours() === doseTime.getHours() &&
+        new Date(dose.timestamp).getMinutes() === doseTime.getMinutes()
     );
     
     if (existingDose) {
@@ -168,7 +170,24 @@ export async function checkAndRecordMissedDoses(): Promise<void> {
       
       // Check each scheduled time
       for (const time of medication.times) {
-        const [hours, minutes] = time.split(":").map(Number);
+        let hours, minutes;
+        
+        // Handle 12-hour format with AM/PM
+        if (time.includes("AM") || time.includes("PM")) {
+          const [timePart, period] = time.split(" ");
+          [hours, minutes] = timePart.split(":").map(Number);
+          
+          // Convert to 24-hour format
+          if (period === "PM" && hours !== 12) {
+            hours += 12;
+          } else if (period === "AM" && hours === 12) {
+            hours = 0;
+          }
+        } else {
+          // Fallback to 24-hour format
+          [hours, minutes] = time.split(":").map(Number);
+        }
+        
         const scheduledTime = new Date();
         scheduledTime.setHours(hours, minutes, 0, 0);
         
@@ -177,13 +196,14 @@ export async function checkAndRecordMissedDoses(): Promise<void> {
         
         // Only check if grace period has passed
         if (graceTime < now) {
-          // Check if dose was already recorded for this medication and time today
+          // Check if dose was already recorded for this medication and specific time today
           const todayString = now.toDateString();
           const existingDose = history.find(
             (dose) => 
               dose.medicationId === medication.id &&
               new Date(dose.timestamp).toDateString() === todayString &&
-              new Date(dose.timestamp).getHours() === hours
+              new Date(dose.timestamp).getHours() === hours &&
+              new Date(dose.timestamp).getMinutes() === minutes
           );
           
           // If no dose recorded and grace period has passed, record as missed

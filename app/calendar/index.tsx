@@ -118,6 +118,67 @@ export default function CalendarScreen() {
     return calendar;
   };
 
+  const isDoseTakenForTime = (medicationId: string, time: string, dayDoses: DoseHistory[]) => {
+    let hours, minutes;
+    
+    // Handle 12-hour format with AM/PM
+    if (time.includes("AM") || time.includes("PM")) {
+      const [timePart, period] = time.split(" ");
+      [hours, minutes] = timePart.split(":").map(Number);
+      
+      // Convert to 24-hour format for comparison
+      if (period === "PM" && hours !== 12) {
+        hours += 12;
+      } else if (period === "AM" && hours === 12) {
+        hours = 0;
+      }
+    } else {
+      // Fallback to 24-hour format
+      [hours, minutes] = time.split(":").map(Number);
+    }
+    
+    return dayDoses.some(
+      (dose) => 
+        dose.medicationId === medicationId && 
+        dose.taken &&
+        new Date(dose.timestamp).getHours() === hours &&
+        new Date(dose.timestamp).getMinutes() === minutes
+    );
+  };
+
+  const handleTakeDose = async (medication: Medication, timeIndex: number = 0) => {
+    try {
+      // Create a timestamp for the specific time slot
+      const now = new Date();
+      const time = medication.times[timeIndex];
+      let hours, minutes;
+      
+      // Handle 12-hour format with AM/PM
+      if (time.includes("AM") || time.includes("PM")) {
+        const [timePart, period] = time.split(" ");
+        [hours, minutes] = timePart.split(":").map(Number);
+        
+        // Convert to 24-hour format
+        if (period === "PM" && hours !== 12) {
+          hours += 12;
+        } else if (period === "AM" && hours === 12) {
+          hours = 0;
+        }
+      } else {
+        // Fallback to 24-hour format
+        [hours, minutes] = time.split(":").map(Number);
+      }
+      
+      const doseTime = new Date(now);
+      doseTime.setHours(hours, minutes, 0, 0);
+      
+      await recordDose(medication.id, true, doseTime.toISOString());
+      loadData();
+    } catch (error) {
+      console.error("Error recording dose:", error);
+    }
+  };
+
   const renderMedicationsForDate = () => {
     const dateStr = selectedDate.toDateString();
     const dayDoses = doseHistory.filter(
@@ -140,27 +201,50 @@ export default function CalendarScreen() {
           <View style={styles.medicationInfo}>
             <Text style={styles.medicationName}>{medication.name}</Text>
             <Text style={styles.medicationDosage}>{medication.dosage}</Text>
-            <Text style={styles.medicationTime}>{medication.times[0]}</Text>
-          </View>
-          {taken ? (
-            <View style={styles.takenBadge}>
-              <Ionicons name="checkmark-circle" size={20} color="#4CAF50" />
-              <Text style={styles.takenText}>Taken</Text>
+            <View style={styles.medicationTimesContainer}>
+              {medication.times.map((time, index) => (
+                <View key={index} style={styles.medicationTimeRow}>
+                  <Ionicons name="time-outline" size={14} color="#666" />
+                  <Text style={styles.medicationTime}>{time}</Text>
+                  {isDoseTakenForTime(medication.id, time, dayDoses) && (
+                    <View style={styles.tinyTakenBadge}>
+                      <Ionicons name="checkmark" size={10} color="#4CAF50" />
+                    </View>
+                  )}
+                </View>
+              ))}
             </View>
-          ) : (
-            <TouchableOpacity
-              style={[
-                styles.takeDoseButton,
-                { backgroundColor: medication.color },
-              ]}
-              onPress={async () => {
-                await recordDose(medication.id, true, new Date().toISOString());
-                loadData();
-              }}
-            >
-              <Text style={styles.takeDoseText}>Take</Text>
-            </TouchableOpacity>
-          )}
+          </View>
+          <View style={styles.timesActionsContainer}>
+            {medication.times.map((time, index) => {
+              const isTaken = isDoseTakenForTime(medication.id, time, dayDoses);
+              return (
+                <View key={index} style={styles.timeActionRow}>
+                  {isTaken ? (
+                    <View style={[styles.takenBadge, styles.smallTakenBadge]}>
+                      <Ionicons
+                        name="checkmark-circle"
+                        size={16}
+                        color="#4CAF50"
+                      />
+                      <Text style={[styles.takenText, styles.smallTakenText]}>Taken</Text>
+                    </View>
+                  ) : (
+                    <TouchableOpacity
+                      style={[
+                        styles.takeDoseButton,
+                        styles.smallTakeDoseButton,
+                        { backgroundColor: medication.color },
+                      ]}
+                      onPress={() => handleTakeDose(medication, index)}
+                    >
+                      <Text style={[styles.takeDoseText, styles.smallTakeDoseText]}>Take</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              );
+            })}
+          </View>
         </View>
       );
     });
@@ -418,6 +502,14 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#666",
   },
+  medicationTimesContainer: {
+    marginTop: 8,
+  },
+  medicationTimeRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 4,
+  },
   takeDoseButton: {
     paddingVertical: 8,
     paddingHorizontal: 15,
@@ -441,5 +533,35 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     fontSize: 14,
     marginLeft: 4,
+  },
+  timesActionsContainer: {
+    alignItems: "flex-end",
+    justifyContent: "center",
+  },
+  timeActionRow: {
+    marginBottom: 4,
+  },
+  smallTakenBadge: {
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+  },
+  smallTakenText: {
+    fontSize: 12,
+  },
+  smallTakeDoseButton: {
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+  },
+  smallTakeDoseText: {
+    fontSize: 12,
+  },
+  tinyTakenBadge: {
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: "#E8F5E9",
+    justifyContent: "center",
+    alignItems: "center",
+    marginLeft: 8,
   },
 });

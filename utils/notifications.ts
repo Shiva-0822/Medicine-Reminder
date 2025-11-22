@@ -47,8 +47,8 @@ export async function registerForPushNotificationsAsync(): Promise<
 }
 
 export async function scheduleMedicationReminder(
-  medication: Medication
-): Promise<string | undefined> {
+  medication: any
+): Promise<void> {
   if (!medication.reminderEnabled) return;
 
   try {
@@ -63,7 +63,7 @@ export async function scheduleMedicationReminder(
         today.setDate(today.getDate() + 1);
       }
 
-      const identifier = await Notifications.scheduleNotificationAsync({
+      await Notifications.scheduleNotificationAsync({
         content: {
           title: "Medication Reminder",
           body: `Time to take ${medication.name} (${medication.dosage})`,
@@ -76,38 +76,34 @@ export async function scheduleMedicationReminder(
           repeats: true,
         } as Notifications.NotificationTriggerInput,
       });
-
-      return identifier;
     }
   } catch (error) {
     console.error("Error scheduling medication reminder:", error);
-    return undefined;
   }
 }
 
 export async function scheduleRefillReminder(
-  medication: Medication
-): Promise<string | undefined> {
+  medication: any
+): Promise<void> {
   if (!medication.refillReminder) return;
 
   try {
-    // Schedule a notification when supply is low
-    if (medication.currentSupply <= medication.refillAt) {
-      const identifier = await Notifications.scheduleNotificationAsync({
-        content: {
-          title: "Refill Reminder",
-          body: `Your ${medication.name} supply is running low. Current supply: ${medication.currentSupply}`,
-          sound: "default",
-          data: { medicationId: medication.id, type: "refill" },
-        },
-        trigger: null, // Show immediately
-      });
-
-      return identifier;
-    }
+    // Schedule a daily notification to check supply levels
+    await Notifications.scheduleNotificationAsync({
+      content: {
+        title: "Refill Check",
+        body: `Checking refill status for ${medication.name}`,
+        sound: "default",
+        data: { medicationId: medication.id, type: "refill-check" },
+      },
+      trigger: {
+        repeats: true,
+        hour: 9, // Check at 9 AM daily
+        minute: 0,
+      } as Notifications.NotificationTriggerInput,
+    });
   } catch (error) {
     console.error("Error scheduling refill reminder:", error);
-    return undefined;
   }
 }
 

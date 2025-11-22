@@ -30,25 +30,25 @@ const FREQUENCIES = [
     id: "1",
     label: "Once daily",
     icon: "sunny-outline" as const,
-    times: ["09:00"],
+    times: ["9:00 AM"],
   },
   {
     id: "2",
     label: "Twice daily",
     icon: "sync-outline" as const,
-    times: ["09:00", "21:00"],
+    times: ["9:00 AM", "9:00 PM"],
   },
   {
     id: "3",
     label: "Three times daily",
     icon: "time-outline" as const,
-    times: ["09:00", "15:00", "21:00"],
+    times: ["9:00 AM", "3:00 PM", "9:00 PM"],
   },
   {
     id: "4",
     label: "Four times daily",
     icon: "repeat-outline" as const,
-    times: ["09:00", "13:00", "17:00", "21:00"],
+    times: ["9:00 AM", "1:00 PM", "5:00 PM", "9:00 PM"],
   },
   { id: "5", label: "As needed", icon: "calendar-outline" as const, times: [] },
 ];
@@ -69,7 +69,7 @@ export default function AddMedicationScreen() {
     frequency: "",
     duration: "",
     startDate: new Date(),
-    times: ["09:00"],
+    times: ["9:00 AM"],
     notes: "",
     reminderEnabled: true,
     refillReminder: false,
@@ -79,6 +79,7 @@ export default function AddMedicationScreen() {
 
   const [errors, setErrors] = useState<{ [key: string]: string }>({});
   const [showTimePicker, setShowTimePicker] = useState(false);
+  const [timePickerIndex, setTimePickerIndex] = useState(0); // Track which time slot we're editing
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [selectedFrequency, setSelectedFrequency] = useState("");
   const [selectedDuration, setSelectedDuration] = useState("");
@@ -211,7 +212,8 @@ export default function AddMedicationScreen() {
             ]}
             onPress={() => {
               setSelectedFrequency(freq.label);
-              setForm({ ...form, frequency: freq.label });
+              // Set the times array based on the selected frequency
+              setForm({ ...form, frequency: freq.label, times: [...freq.times] });
             }}
           >
             <View
@@ -387,6 +389,7 @@ export default function AddMedicationScreen() {
                     style={styles.timeButton}
                     onPress={() => {
                       setShowTimePicker(true);
+                      setTimePickerIndex(index); // Track which time slot we're editing
                     }}
                   >
                     <View style={styles.timeIconContainer}>
@@ -402,23 +405,50 @@ export default function AddMedicationScreen() {
             {showTimePicker && (
               <DateTimePicker
                 value={(() => {
-                  const [hours, minutes] = form.times[0].split(":").map(Number);
+                  const time = form.times[timePickerIndex];
                   const date = new Date();
-                  date.setHours(hours, minutes, 0, 0);
+                  
+                  // Handle 12-hour format with AM/PM
+                  if (time.includes("AM") || time.includes("PM")) {
+                    let [timePart, period] = time.split(" ");
+                    let [hours, minutes] = timePart.split(":").map(Number);
+                    
+                    // Convert to 24-hour format for Date object
+                    if (period === "PM" && hours !== 12) {
+                      hours += 12;
+                    } else if (period === "AM" && hours === 12) {
+                      hours = 0;
+                    }
+                    
+                    date.setHours(hours, minutes || 0, 0, 0);
+                  } else {
+                    // Fallback to 24-hour format parsing
+                    const [hours, minutes] = time.split(":").map(Number);
+                    date.setHours(hours, minutes, 0, 0);
+                  }
+                  
                   return date;
                 })()}
                 mode="time"
                 onChange={(event, date) => {
                   setShowTimePicker(false);
                   if (date) {
-                    const newTime = date.toLocaleTimeString("default", {
-                      hour: "2-digit",
-                      minute: "2-digit",
-                      hour12: false,
-                    });
+                    // Convert to 12-hour format with AM/PM
+                    let hours = date.getHours();
+                    const minutes = date.getMinutes();
+                    const period = hours >= 12 ? "PM" : "AM";
+                    
+                    // Convert to 12-hour format
+                    if (hours === 0) {
+                      hours = 12;
+                    } else if (hours > 12) {
+                      hours -= 12;
+                    }
+                    
+                    const newTime = `${hours}:${minutes.toString().padStart(2, '0')} ${period}`;
                     setForm((prev) => ({
                       ...prev,
-                      times: prev.times.map((t, i) => (i === 0 ? newTime : t)),
+                      times: prev.times.map((t, i) => (i === timePickerIndex ? newTime : t)),
                     }));
                   }
                 }}
